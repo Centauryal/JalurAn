@@ -1,6 +1,8 @@
 package com.centaury.jalurangkot;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Build;
@@ -30,9 +32,6 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
-import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
-import com.google.android.gms.maps.GoogleMap.OnInfoWindowCloseListener;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -51,7 +50,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -104,12 +102,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             @Override
             public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 switch (newState) {
-                    case BottomSheetBehavior.STATE_HIDDEN:
-                        break;
                     case BottomSheetBehavior.STATE_EXPANDED:
-                    break;
+                        break;
                     case BottomSheetBehavior.STATE_COLLAPSED:
-                    break;
+                        break;
                     case BottomSheetBehavior.STATE_DRAGGING:
                         break;
                     case BottomSheetBehavior.STATE_SETTLING:
@@ -150,8 +146,33 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     @Override
                     public void onClick(View view, int position) {
 
-                        JalurRute jalurRute = list.get(position);
-                        Toast.makeText(getApplicationContext(), jalurRute.getName() + "clicked", Toast.LENGTH_SHORT).show();
+                        Context context=view.getContext();
+                        final Intent intent;
+                        switch (position) {
+                            case 0:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            case 1:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            case 2:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            case 3:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            case 4:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            case 5:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                            default:
+                                intent = new Intent(context, Lyn_O.class);
+                                break;
+                        }
+
+                        context.startActivity(intent);
                     }
 
                     @Override
@@ -296,15 +317,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                             Double lon = jTreeObj.getDouble("lon");
 
                             LatLng latlng = new LatLng(lat, lon);
-
-                            /*//move CameraPosition on first result
-                            if (i == 0) {
-                                CameraPosition cameraPosition = new CameraPosition.Builder()
-                                        .target(latlng).zoom(13).build();
-
-                                mMap.animateCamera(CameraUpdateFactory
-                                        .newCameraPosition(cameraPosition));
-                            }*/
 
                             mMap.addMarker(new MarkerOptions()
                                     .icon(BitmapDescriptorFactory.fromResource(R.drawable.markerangkot))
