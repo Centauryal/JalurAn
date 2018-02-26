@@ -1,38 +1,51 @@
 package com.centaury.jalurangkot;
 
 import android.Manifest;
-import android.content.Context;
-import android.content.Intent;
+import android.animation.ValueAnimator;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Point;
 import android.location.Location;
 import android.os.Build;
+import android.os.Handler;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.design.widget.BottomSheetBehavior;
+import android.support.design.widget.TabLayout;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.util.Log;
-import android.view.View;
+import android.view.LayoutInflater;
+import android.view.animation.Interpolator;
+import android.view.animation.LinearInterpolator;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.volley.Request;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
 import com.centaury.jalurangkot.app.AppConfig;
 import com.centaury.jalurangkot.app.AppController;
-
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.GoogleApiClient.OnConnectionFailedListener;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.places.Place;
+import com.google.android.gms.location.places.ui.PlaceAutocompleteFragment;
+import com.google.android.gms.location.places.ui.PlaceSelectionListener;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
@@ -40,17 +53,14 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.Request.Method;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.List;
 
+import biz.laenger.android.vpbs.BottomSheetUtils;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
@@ -75,18 +85,25 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final long FASTEST_INTERVAL = UPDATE_INTERVAL / 2;
 
     private GoogleMap mMap;
+    PlaceAutocompleteFragment placeAutoComplete;
+
     private CameraPosition mCameraPosition;
     LocationRequest mLocationRequest;
     GoogleApiClient mGoogleApiClient;
     Marker mCurrLocationMarker;
 
-    private RecyclerView rvCategory;
-    private ArrayList<JalurRute> list;
+    private TabLayout tabLayout;
+    private ViewPager viewPager;
 
-    @BindView(R.id.bottom_sheet)
-    LinearLayout layoutBottomSheet;
-
-    BottomSheetBehavior sheetBehavior;
+    private Marker marker;
+    private float v;
+    private double lat, lng;
+    private Handler handler;
+    private LatLng startPosition;
+    private LatLng endPosition;
+    private LatLng latLng;
+    private int index, next;
+    private List<LatLng> polyLineList;
 
 
     @Override
@@ -94,43 +111,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
-        ButterKnife.bind(this);
+        viewPager = (ViewPager) findViewById(R.id.viewpager);
+        tabLayout = (TabLayout) findViewById(R.id.tabs);
 
-        sheetBehavior = BottomSheetBehavior.from(layoutBottomSheet);
-
-        sheetBehavior.setBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
-            @Override
-            public void onStateChanged(@NonNull View bottomSheet, int newState) {
-                switch (newState) {
-                    case BottomSheetBehavior.STATE_EXPANDED:
-                        break;
-                    case BottomSheetBehavior.STATE_COLLAPSED:
-                        break;
-                    case BottomSheetBehavior.STATE_DRAGGING:
-                        break;
-                    case BottomSheetBehavior.STATE_SETTLING:
-                        break;
-                }
-            }
-
-            @Override
-            public void onSlide(@NonNull View bottomSheet, float slideOffset) {
-
-            }
-        });
+        polyLineList = new ArrayList<>();
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-
-        rvCategory = (RecyclerView) findViewById(R.id.rv_category);
-        rvCategory.setHasFixedSize(true);
-
-        list = new ArrayList<>();
-        list.addAll(JalurData.getListData());
-
-        showRecyclerList();
 
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             checkPermission();
@@ -141,46 +130,49 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             mCameraPosition = savedInstanceState.getParcelable(KEY_CAMERA_POSITION);
         }
 
-        rvCategory.addOnItemTouchListener(new RecyclerTouchListener(getApplicationContext(), rvCategory,
-                new RecyclerTouchListener.ClickListener() {
-                    @Override
-                    public void onClick(View view, int position) {
+        setupBottomSheet();
 
-                        Context context=view.getContext();
-                        final Intent intent;
-                        switch (position) {
-                            case 0:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            case 1:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            case 2:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            case 3:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            case 4:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            case 5:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                            default:
-                                intent = new Intent(context, Lyn_O.class);
-                                break;
-                        }
+        placeAutoComplete = (PlaceAutocompleteFragment) getFragmentManager().findFragmentById(R.id.place_autocomplete_fragment);
+        placeAutoComplete.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
 
-                        context.startActivity(intent);
-                    }
+                Log.d("Maps", "Place selected: " + place.getName());
+            }
 
-                    @Override
-                    public void onLongClick(View view, int position) {
+            @Override
+            public void onError(Status status) {
+                Log.d("Maps", "An error occurred: " + status);
+            }
+        });
 
-                    }
-                }));
 
+    }
+
+    private void setupBottomSheet() {
+        final PagerAdapter sectionsPagerAdapter = new PagerAdapter(getSupportFragmentManager(), this, PagerAdapter.TabItem.ARMADA_TERDEKAT, PagerAdapter.TabItem.JALUR_MIKROLET, PagerAdapter.TabItem.TEMPAT_PENTING);
+        viewPager.setOffscreenPageLimit(1);
+        viewPager.setAdapter(sectionsPagerAdapter);
+        tabLayout.setupWithViewPager(viewPager);
+        BottomSheetUtils.setupViewPager(viewPager);
+        setupTabIcons();
+    }
+
+    private void setupTabIcons() {
+        TextView tabOne = (TextView) LayoutInflater.from(this).inflate(R.layout.custom_tab, null);
+        tabOne.setText(R.string.title_armada_terdekat);
+        tabOne.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.marker_multiple, 0, 0);
+        tabLayout.getTabAt(0).setCustomView(tabOne);
+
+        TextView tabTwo = (TextView) LayoutInflater.from(this).inflate(R.layout.custom_tab, null);
+        tabTwo.setText(R.string.title_jalur_mikrolet);
+        tabTwo.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.mikrolet_marker, 0, 0);
+        tabLayout.getTabAt(1).setCustomView(tabTwo);
+
+        TextView tabThree = (TextView) LayoutInflater.from(this).inflate(R.layout.custom_tab, null);
+        tabThree.setText(R.string.title_tempat_penting);
+        tabThree.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.home_marker, 0, 0);
+        tabLayout.getTabAt(2).setCustomView(tabThree);
     }
 
     /**
@@ -289,6 +281,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    @Override
+    protected void onSaveInstanceState(Bundle savedInstanceState) {
+        if (mMap != null) {
+            savedInstanceState.putParcelable(KEY_CAMERA_POSITION, mMap.getCameraPosition());
+            savedInstanceState.putParcelable(KEY_LOCATION, mLastLocation);
+            super.onSaveInstanceState(savedInstanceState);
+        }
+
+    }
+
     /**
      * Function to store user in MySQL database will post params(id,
      * lat, lon) to set url
@@ -298,7 +300,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Tag used to cancel the request
         String tag_string_request = "req_location";
 
-        StringRequest strReq = new StringRequest(Method.GET,
+        StringRequest strReq = new StringRequest(Request.Method.GET,
                 AppConfig.URL_GETLOCATION, new Response.Listener<String>() {
 
             @Override
@@ -309,20 +311,65 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     JSONArray jObj = new JSONArray(response);
 
                     // Check for error node in json
-                        for (int i = 0; i < jObj.length(); i++) {
+                    for (int i = 0; i < jObj.length(); i++) {
 
-                            JSONObject jTreeObj = jObj.getJSONObject(i);
-                            String id = jTreeObj.getString("id");
-                            Double lat = jTreeObj.getDouble("lat");
-                            Double lon = jTreeObj.getDouble("lon");
+                        JSONObject jTreeObj = jObj.getJSONObject(i);
+                        //String id = jTreeObj.getString("nopol");
+                        Double lat = jTreeObj.getDouble("lat");
+                        Double lon = jTreeObj.getDouble("lon");
 
-                            LatLng latlng = new LatLng(lat, lon);
+                        latLng = new LatLng(lat, lon);
 
-                            mMap.addMarker(new MarkerOptions()
-                                    .icon(BitmapDescriptorFactory.fromResource(R.drawable.markerangkot))
-                                    .title(id).position(latlng));
+                        /*marker = mMap.addMarker(new MarkerOptions()
+                                .icon(BitmapDescriptorFactory.fromResource(R.drawable.lyn_marker))
+                                .title(id).position(latLng));*/
 
+                    }
+
+                    marker = mMap.addMarker(new MarkerOptions().position(latLng)
+                            .flat(true)
+                            .icon(BitmapDescriptorFactory.fromResource(R.drawable.lyn_marker)));
+                    handler = new Handler();
+                    index = -1;
+                    next = 1;
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (index < polyLineList.size() - 1) {
+                                index++;
+                                next = index + 1;
+                            }
+                            if (index < polyLineList.size() - 1) {
+                                startPosition = polyLineList.get(index);
+                                endPosition = polyLineList.get(next);
+                            }
+                            ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
+                            valueAnimator.setDuration(3000);
+                            valueAnimator.setInterpolator(new LinearInterpolator());
+                            valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                                @Override
+                                public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                                    v = valueAnimator.getAnimatedFraction();
+                                    lng = v * endPosition.longitude + (1 - v)
+                                            * startPosition.longitude;
+                                    lat = v * endPosition.latitude + (1 - v)
+                                            * startPosition.latitude;
+                                    LatLng newPos = new LatLng(lat, lng);
+                                    marker.setPosition(newPos);
+                                    marker.setAnchor(0.5f, 0.5f);
+                                    marker.setRotation(getBearing(startPosition, newPos));
+                                    mMap.moveCamera(CameraUpdateFactory
+                                            .newCameraPosition
+                                                    (new CameraPosition.Builder()
+                                                            .target(newPos)
+                                                            .zoom(15.5f)
+                                                            .build()));
+                                }
+                            });
+                            valueAnimator.start();
+                            handler.postDelayed(this, 3000);
                         }
+                    }, 3000);
 
                 } catch (JSONException e) {
                     // JSON error
@@ -345,23 +392,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Adding request to request queue
         AppController.getInstance().addToRequestQueue(strReq, tag_string_request);
 
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle savedInstanceState) {
-        if (mMap != null) {
-            savedInstanceState.putParcelable(KEY_CAMERA_POSITION, mMap.getCameraPosition());
-            savedInstanceState.putParcelable(KEY_LOCATION, mLastLocation);
-            super.onSaveInstanceState(savedInstanceState);
-        }
-
-    }
-
-    private void showRecyclerList(){
-        rvCategory.setLayoutManager(new LinearLayoutManager(this));
-        ListJalurRuteAdapter listJalurRuteAdapter= new ListJalurRuteAdapter(this);
-        listJalurRuteAdapter.setListJalurRute(list);
-        rvCategory.setAdapter(listJalurRuteAdapter);
     }
 
     public boolean checkPermission() {
@@ -424,4 +454,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    private float getBearing(LatLng begin, LatLng end) {
+        double lat = Math.abs(begin.latitude - end.latitude);
+        double lng = Math.abs(begin.longitude - end.longitude);
+
+        if (begin.latitude < end.latitude && begin.longitude < end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)));
+        else if (begin.latitude >= end.latitude && begin.longitude < end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 90);
+        else if (begin.latitude >= end.latitude && begin.longitude >= end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)) + 180);
+        else if (begin.latitude < end.latitude && begin.longitude >= end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 270);
+        return -1;
+    }
 }

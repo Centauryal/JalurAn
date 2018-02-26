@@ -3,19 +3,29 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/bottom_sheet"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="#fff"
+    android:layout_height="match_parent"
+    android:elevation="16dp"
     android:orientation="vertical"
-    android:padding="16dp"
-    app:behavior_hideable="true"
-    app:behavior_peekHeight="250dp"
-    app:layout_behavior="android.support.design.widget.BottomSheetBehavior">
+    android:background="?attr/colorBackgroundFloating"
+    app:behavior_peekHeight="72dp"
+    app:layout_behavior="@string/view_pager_bottom_sheet_behavior">
 
-    <android.support.v7.widget.RecyclerView
-        android:id="@+id/rv_category"
+    <android.support.design.widget.AppBarLayout
+        android:id="@+id/bottom_sheet_appbar"
+        style="@style/BottomSheetAppBarStyle"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content">
 
-    </android.support.v7.widget.RecyclerView>
+        <android.support.design.widget.TabLayout
+            android:id="@+id/tabs"
+            style="@style/MainTabLayoutStyle"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/custom_tab_layout_height"/>
+    </android.support.design.widget.AppBarLayout>
+
+    <android.support.v4.view.ViewPager
+        android:id="@+id/viewpager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
 </LinearLayout>

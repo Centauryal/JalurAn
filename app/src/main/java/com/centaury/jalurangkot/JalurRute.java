@@ -6,7 +6,15 @@ package com.centaury.jalurangkot;
 
 public class JalurRute {
 
-    private String name, photo;
+    private String name, photo, desc;
+
+    public String getDesc() {
+        return desc;
+    }
+
+    public void setDesc(String desc) {
+        this.desc = desc;
+    }
 
     public String getName() {
         return name;
