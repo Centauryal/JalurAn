@@ -1,9 +1,12 @@
 package com.centaury.jalurangkot;
 
 import android.Manifest;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Point;
 import android.location.Location;
 import android.os.Build;
@@ -42,6 +45,7 @@ import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.ui.PlaceAutocompleteFragment;
 import com.google.android.gms.location.places.ui.PlaceSelectionListener;
+import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -50,8 +54,13 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.gms.maps.model.SquareCap;
+import com.google.maps.android.PolyUtil;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -63,6 +72,8 @@ import java.util.List;
 import biz.laenger.android.vpbs.BottomSheetUtils;
 import butterknife.BindView;
 import butterknife.ButterKnife;
+
+import static com.google.android.gms.maps.model.JointType.ROUND;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, ConnectionCallbacks,
         OnConnectionFailedListener, LocationListener {
@@ -95,15 +106,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private TabLayout tabLayout;
     private ViewPager viewPager;
 
+    private LatLng latLng;
+    private List<LatLng> polyLineList;
+
     private Marker marker;
     private float v;
-    private double lat, lng;
+    private double lat, lon;
     private Handler handler;
-    private LatLng startPosition;
-    private LatLng endPosition;
-    private LatLng latLng;
     private int index, next;
-    private List<LatLng> polyLineList;
 
 
     @Override
@@ -317,12 +327,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         //String id = jTreeObj.getString("nopol");
                         Double lat = jTreeObj.getDouble("lat");
                         Double lon = jTreeObj.getDouble("lon");
+                        String polyline = jTreeObj.getString("point");
+
+                        polyLineList = PolyUtil.decode(polyline);
+                        Log.d(TAG, polyLineList + "");
 
                         latLng = new LatLng(lat, lon);
-
-                        /*marker = mMap.addMarker(new MarkerOptions()
-                                .icon(BitmapDescriptorFactory.fromResource(R.drawable.lyn_marker))
-                                .title(id).position(latLng));*/
 
                     }
 
@@ -340,30 +350,24 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                                 next = index + 1;
                             }
                             if (index < polyLineList.size() - 1) {
-                                startPosition = polyLineList.get(index);
-                                endPosition = polyLineList.get(next);
+                                latLng = polyLineList.get(index);
+                                latLng = polyLineList.get(next);
                             }
                             ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
-                            valueAnimator.setDuration(3000);
+                            valueAnimator.setDuration(3000); //Duration 3 second
                             valueAnimator.setInterpolator(new LinearInterpolator());
                             valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
                                 @Override
                                 public void onAnimationUpdate(ValueAnimator valueAnimator) {
                                     v = valueAnimator.getAnimatedFraction();
-                                    lng = v * endPosition.longitude + (1 - v)
-                                            * startPosition.longitude;
-                                    lat = v * endPosition.latitude + (1 - v)
-                                            * startPosition.latitude;
-                                    LatLng newPos = new LatLng(lat, lng);
+                                    lon = v * latLng.longitude + (1 - v)
+                                            * latLng.longitude;
+                                    lat = v * latLng.latitude + (1 - v)
+                                            * latLng.latitude;
+                                    LatLng newPos = new LatLng(lat, lon);
                                     marker.setPosition(newPos);
                                     marker.setAnchor(0.5f, 0.5f);
-                                    marker.setRotation(getBearing(startPosition, newPos));
-                                    mMap.moveCamera(CameraUpdateFactory
-                                            .newCameraPosition
-                                                    (new CameraPosition.Builder()
-                                                            .target(newPos)
-                                                            .zoom(15.5f)
-                                                            .build()));
+                                    marker.setRotation(getBearing(latLng, newPos));
                                 }
                             });
                             valueAnimator.start();
