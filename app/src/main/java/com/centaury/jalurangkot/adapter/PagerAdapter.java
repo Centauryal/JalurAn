@@ -1,10 +1,15 @@
-package com.centaury.jalurangkot;
+package com.centaury.jalurangkot.adapter;
 
 import android.content.Context;
 import android.support.annotation.StringRes;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
+
+import com.centaury.jalurangkot.ArmadaTerdekatFragment;
+import com.centaury.jalurangkot.JalurMikroletFragment;
+import com.centaury.jalurangkot.R;
+import com.centaury.jalurangkot.TempatPentingFragment;
 
 /**
  * Created by Centaury on 20/02/2018.

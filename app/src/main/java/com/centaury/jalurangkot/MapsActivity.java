@@ -1,17 +1,12 @@
 package com.centaury.jalurangkot;
 
 import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.graphics.Point;
 import android.location.Location;
 import android.os.Build;
 import android.os.Handler;
-import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.design.widget.TabLayout;
@@ -20,11 +15,15 @@ import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.animation.Interpolator;
+import android.view.View;
 import android.view.animation.LinearInterpolator;
-import android.widget.LinearLayout;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
+import android.widget.AutoCompleteTextView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,48 +31,44 @@ import com.android.volley.Request;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.StringRequest;
+
+import com.centaury.jalurangkot.adapter.PagerAdapter;
+import com.centaury.jalurangkot.adapter.PlaceAutocompleteAdapter;
 import com.centaury.jalurangkot.app.AppConfig;
 import com.centaury.jalurangkot.app.AppController;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.GoogleApiClient.OnConnectionFailedListener;
-import com.google.android.gms.common.api.Status;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.places.Place;
-import com.google.android.gms.location.places.ui.PlaceAutocompleteFragment;
-import com.google.android.gms.location.places.ui.PlaceSelectionListener;
-import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.location.places.PlaceBuffer;
+import com.google.android.gms.location.places.Places;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.Polyline;
-import com.google.android.gms.maps.model.PolylineOptions;
-import com.google.android.gms.maps.model.SquareCap;
 import com.google.maps.android.PolyUtil;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import biz.laenger.android.vpbs.BottomSheetUtils;
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-import static com.google.android.gms.maps.model.JointType.ROUND;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, ConnectionCallbacks,
         OnConnectionFailedListener, LocationListener {
@@ -90,31 +85,30 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     // Keys for storing activity state in the Bundle.
     private static final String KEY_CAMERA_POSITION = "camera_position";
     private static final String KEY_LOCATION = "location";
+    private static final String LOG_TAG = "SearchPlace";
 
     // Location updates intervals in sec
     private static final long UPDATE_INTERVAL = 10000; // 10 sec
     private static final long FASTEST_INTERVAL = UPDATE_INTERVAL / 2;
 
     private GoogleMap mMap;
-    PlaceAutocompleteFragment placeAutoComplete;
+    private AutoCompleteTextView destination;
+    private PlaceAutocompleteAdapter mAdapter;
 
     private CameraPosition mCameraPosition;
     LocationRequest mLocationRequest;
     GoogleApiClient mGoogleApiClient;
-    Marker mCurrLocationMarker;
 
     private TabLayout tabLayout;
     private ViewPager viewPager;
 
-    private LatLng latLng;
-    private List<LatLng> polyLineList;
+    private LatLng latLng, latLngAwal, latLngAkhir, newLatLngTemp;
 
-    private Marker marker;
+    private Marker mCurrLocationMarker, marker;
     private float v;
-    private double lat, lon;
-    private Handler handler;
     private int index, next;
-
+    private Handler handler;
+    private String mLatitude, mLongitude;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,15 +117,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         viewPager = (ViewPager) findViewById(R.id.viewpager);
         tabLayout = (TabLayout) findViewById(R.id.tabs);
-
-        polyLineList = new ArrayList<>();
+        destination = (AutoCompleteTextView) findViewById(R.id.place_autocomplete_fragment);
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             checkPermission();
         }
 
@@ -142,20 +135,78 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         setupBottomSheet();
 
-        placeAutoComplete = (PlaceAutocompleteFragment) getFragmentManager().findFragmentById(R.id.place_autocomplete_fragment);
-        placeAutoComplete.setOnPlaceSelectedListener(new PlaceSelectionListener() {
-            @Override
-            public void onPlaceSelected(Place place) {
+        mAdapter = new PlaceAutocompleteAdapter(this, android.R.layout.simple_list_item_1,
+                mGoogleApiClient, null, null);
 
-                Log.d("Maps", "Place selected: " + place.getName());
-            }
+        destination.setAdapter(mAdapter);
 
+        /*
+        * Sets the start and destination points based on the values selected
+        * from the autocomplete text views.
+        * */
+        destination.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
-            public void onError(Status status) {
-                Log.d("Maps", "An error occurred: " + status);
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+
+                final PlaceAutocompleteAdapter.PlaceAutocomplete item = mAdapter.getItem(position);
+                final String placeId = String.valueOf(item.placeId);
+                Log.i(LOG_TAG, "Autocomplete item selected: " + item.description);
+
+            /*
+             Issue a request to the Places Geo Data API to retrieve a Place object with additional
+              details about the place.
+              */
+                PendingResult<PlaceBuffer> placeResult = Places.GeoDataApi
+                        .getPlaceById(mGoogleApiClient, placeId);
+                placeResult.setResultCallback(new ResultCallback<PlaceBuffer>() {
+                    @Override
+                    public void onResult(PlaceBuffer places) {
+                        if (!places.getStatus().isSuccess()) {
+                            // Request did not complete successfully
+                            Log.e(LOG_TAG, "Place query did not complete. Error: " + places.getStatus().toString());
+                            places.release();
+                            return;
+                        }
+                        // Get the Place object from the buffer.
+                        final Place place = places.get(0);
+                        hideKeyboard();
+                        mLatitude=String.valueOf(place.getLatLng().latitude);
+                        mLongitude=String.valueOf(place.getLatLng().longitude);
+                        newLatLngTemp = new LatLng(place.getLatLng().latitude, place.getLatLng().longitude);
+
+                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(newLatLngTemp, 15f));
+                    }
+                });
+
             }
         });
 
+        /*
+        These text watchers set the start and end points to null because once there's
+        * a change after a value has been selected from the dropdown
+        * then the value has to reselected from dropdown to get
+        * the correct location.
+        * */
+        destination.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+
+                if (newLatLngTemp != null) {
+                    newLatLngTemp = null;
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+        });
 
     }
 
@@ -185,6 +236,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         tabLayout.getTabAt(2).setCustomView(tabThree);
     }
 
+    public void hideKeyboard() {
+        // Check if no view has focus:
+        View view = this.getCurrentFocus();
+        if (view != null) {
+            InputMethodManager inputManager = (InputMethodManager) this.getSystemService(Context.INPUT_METHOD_SERVICE);
+            inputManager.hideSoftInputFromWindow(view.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+        }
+    }
+
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
@@ -197,8 +257,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-
-        getLocation();
 
         //Initialize Google Play Services
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -218,6 +276,22 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             mMap.setMyLocationEnabled(true);
         }
 
+        MyTimerTask myTask = new MyTimerTask();
+        Timer myTimer = new Timer();
+        myTimer.schedule(myTask,1000, 5000);
+
+    }
+
+    class MyTimerTask extends TimerTask {
+        public void run() {
+            getLocation();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mGoogleApiClient.disconnect();;
     }
 
     protected synchronized void buildGoogleApiClient() {
@@ -225,6 +299,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .addApi(LocationServices.API)
+                .addApi(Places.GEO_DATA_API)
+                .addApi(Places.PLACE_DETECTION_API)
                 .build();
         mGoogleApiClient.connect();
     }
@@ -266,7 +342,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         MarkerOptions markerOptions = new MarkerOptions();
         markerOptions.position(latLng);
         markerOptions.title("Current Position");
-        markerOptions.icon(BitmapDescriptorFactory.fromResource(R.drawable.markerclient));
+        markerOptions.icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_human_male_black_36dp));
         mCurrLocationMarker = mMap.addMarker(markerOptions);
 
         if (ActivityCompat.checkSelfPermission(this,
@@ -314,66 +390,37 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 AppConfig.URL_GETLOCATION, new Response.Listener<String>() {
 
             @Override
-            public void onResponse(String response) {
+            public void onResponse(final String response) {
                 Log.d(TAG, "Location Response: " + response.toString());
 
+                if (marker != null){
+                    marker.remove();
+                }
+
                 try {
-                    JSONArray jObj = new JSONArray(response);
+                    final JSONArray jObj = new JSONArray(response);
 
                     // Check for error node in json
                     for (int i = 0; i < jObj.length(); i++) {
 
                         JSONObject jTreeObj = jObj.getJSONObject(i);
-                        //String id = jTreeObj.getString("nopol");
-                        Double lat = jTreeObj.getDouble("lat");
-                        Double lon = jTreeObj.getDouble("lon");
+                        String nopol = jTreeObj.getString("nopol");
+                        Double lat = jTreeObj.getDouble("lastlat");
+                        Double lon = jTreeObj.getDouble("lastlon");
                         String polyline = jTreeObj.getString("point");
-
-                        polyLineList = PolyUtil.decode(polyline);
-                        Log.d(TAG, polyLineList + "");
 
                         latLng = new LatLng(lat, lon);
 
-                    }
+                        List<LatLng> polyLineList;
+                        polyLineList = PolyUtil.decode(polyline);
 
-                    marker = mMap.addMarker(new MarkerOptions().position(latLng)
-                            .flat(true)
-                            .icon(BitmapDescriptorFactory.fromResource(R.drawable.lyn_marker)));
-                    handler = new Handler();
-                    index = -1;
-                    next = 1;
-                    handler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (index < polyLineList.size() - 1) {
-                                index++;
-                                next = index + 1;
-                            }
-                            if (index < polyLineList.size() - 1) {
-                                latLng = polyLineList.get(index);
-                                latLng = polyLineList.get(next);
-                            }
-                            ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
-                            valueAnimator.setDuration(3000); //Duration 3 second
-                            valueAnimator.setInterpolator(new LinearInterpolator());
-                            valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                                @Override
-                                public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                                    v = valueAnimator.getAnimatedFraction();
-                                    lon = v * latLng.longitude + (1 - v)
-                                            * latLng.longitude;
-                                    lat = v * latLng.latitude + (1 - v)
-                                            * latLng.latitude;
-                                    LatLng newPos = new LatLng(lat, lon);
-                                    marker.setPosition(newPos);
-                                    marker.setAnchor(0.5f, 0.5f);
-                                    marker.setRotation(getBearing(latLng, newPos));
-                                }
-                            });
-                            valueAnimator.start();
-                            handler.postDelayed(this, 3000);
-                        }
-                    }, 3000);
+                        marker = mMap.addMarker(new MarkerOptions().position(latLng)
+                                .flat(true)
+                                .icon(BitmapDescriptorFactory.fromResource(R.drawable.lyn_marker)));
+
+                        AnimateMarker(marker, polyLineList);
+
+                    }
 
                 } catch (JSONException e) {
                     // JSON error
@@ -395,7 +442,57 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         // Adding request to request queue
         AppController.getInstance().addToRequestQueue(strReq, tag_string_request);
+    }
 
+    private void AnimateMarker(final Marker markeranimasi, final List<LatLng> polyLineList) {
+        handler = new Handler();
+        index = -1;
+        next = 1;
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (index < polyLineList.size() - 1) {
+                    index++;
+                    next = index + 1;
+                }
+                if (index < polyLineList.size() - 1) {
+                    latLngAwal = polyLineList.get(index);
+                    latLngAkhir = polyLineList.get(next);
+                }
+                ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
+                valueAnimator.setDuration(1000); //Duration
+                valueAnimator.setInterpolator(new LinearInterpolator());
+
+                valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                    @Override
+                    public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                        if (polyLineList.isEmpty() || polyLineList.size() == 1) {
+                            v = valueAnimator.getAnimatedFraction();
+                            double lon = v * latLng.longitude + (1 - v)
+                                    * latLng.longitude;
+                            double lat = v * latLng.latitude + (1 - v)
+                                    * latLng.latitude;
+                            LatLng newPos = new LatLng(lat, lon);
+                            markeranimasi.setPosition(newPos);
+                            markeranimasi.setAnchor(0.5f, 0.5f);
+                            markeranimasi.setRotation(getBearing(latLng, newPos));
+                        } else {
+                            v = valueAnimator.getAnimatedFraction();
+                            double lon = v * latLngAkhir.longitude + (1 - v)
+                                    * latLngAwal.longitude;
+                            double lat = v * latLngAkhir.latitude + (1 - v)
+                                    * latLngAwal.latitude;
+                            LatLng newPos = new LatLng(lat, lon);
+                            markeranimasi.setPosition(newPos);
+                            markeranimasi.setAnchor(0.5f, 0.5f);
+                            markeranimasi.setRotation(getBearing(latLngAwal, newPos));
+                        }
+                    }
+                });
+                valueAnimator.start();
+                handler.postDelayed(this, 1000);
+            }
+        });
     }
 
     public boolean checkPermission() {
@@ -460,16 +557,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private float getBearing(LatLng begin, LatLng end) {
         double lat = Math.abs(begin.latitude - end.latitude);
-        double lng = Math.abs(begin.longitude - end.longitude);
+        double lon = Math.abs(begin.longitude - end.longitude);
 
         if (begin.latitude < end.latitude && begin.longitude < end.longitude)
-            return (float) (Math.toDegrees(Math.atan(lng / lat)));
+            return (float) (Math.toDegrees(Math.atan(lon / lat)));
         else if (begin.latitude >= end.latitude && begin.longitude < end.longitude)
-            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 90);
+            return (float) ((90 - Math.toDegrees(Math.atan(lon / lat))) + 90);
         else if (begin.latitude >= end.latitude && begin.longitude >= end.longitude)
-            return (float) (Math.toDegrees(Math.atan(lng / lat)) + 180);
+            return (float) (Math.toDegrees(Math.atan(lon / lat)) + 180);
         else if (begin.latitude < end.latitude && begin.longitude >= end.longitude)
-            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 270);
+            return (float) ((90 - Math.toDegrees(Math.atan(lon / lat))) + 270);
         return -1;
     }
 }

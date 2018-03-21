@@ -7,9 +7,9 @@ package com.centaury.jalurangkot.app;
 public class AppConfig {
 
     // Server set location
-    public static String URL_SETLOCATION = "http://www.supersoft.co.id/jalurangkot/setlocation.php";
+    public static String URL_SETLOCATION = "http://www.jalurangkot.com/androidapps/setlocation.php";
 
-    public static String URL_GETLOCATION = "http://www.supersoft.co.id/jalurangkot/getlocation.php";
+    public static String URL_GETLOCATION = "http://www.jalurangkot.com/androidapps/getlocation.php";
 
-    public static String URL_RUTELYN_O = "http://supersoft.co.id/jalurangkot/displayrute.php";
+    public static String URL_RUTELYN_O = "http://www.jalurangkot.com/androidapps/displayrute.php";
 }
